@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0f172a">
+  <title>영천 하수구 수위 알리미</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="logo" aria-hidden="true">💧</span>
+      <div>
+        <h1>영천 하수구 수위 알리미</h1>
+        <p class="sub">경상북도 영천시 · 실시간 맨홀 수위 모니터링</p>
+      </div>
+    </div>
+    <div class="top-actions">
+      <span id="modeBadge" class="badge">데모</span>
+      <button id="notifyBtn" class="btn ghost" type="button">🔔 알림 켜기</button>
+    </div>
+  </header>
+
+  <section id="banner" class="banner safe" role="status" aria-live="polite">
+    <strong id="bannerTitle">모든 지점 안전</strong>
+    <span id="bannerText">현재 위험 지점이 없습니다.</span>
+  </section>
+
+  <main class="layout">
+    <section class="card summary">
+      <div class="stat"><span class="num" id="cntSafe">0</span><span class="lbl">안전</span></div>
+      <div class="stat"><span class="num caution" id="cntCaution">0</span><span class="lbl">주의</span></div>
+      <div class="stat"><span class="num warning" id="cntWarning">0</span><span class="lbl">경고</span></div>
+      <div class="stat"><span class="num danger" id="cntDanger">0</span><span class="lbl">위험</span></div>
+    </section>
+
+    <section class="card weather">
+      <div class="row">
+        <div>
+          <div class="lbl">현재 강우량 (영천)</div>
+          <div class="big"><span id="rainVal">0</span> <small>mm/h</small></div>
+        </div>
+        <div class="rain-icon" id="rainIcon">☀️</div>
+      </div>
+      <div id="simControls" class="sim">
+        <label for="rainSlider">시뮬레이션 강우량</label>
+        <input id="rainSlider" type="range" min="0" max="100" value="0" step="1">
+        <div class="sim-btns">
+          <button class="btn" data-rain="0" type="button">맑음</button>
+          <button class="btn" data-rain="15" type="button">보통 비</button>
+          <button class="btn" data-rain="45" type="button">호우</button>
+          <button class="btn danger" id="stormBtn" type="button">⛈ 집중호우 시나리오</button>
+        </div>
+        <label class="speed"><input type="checkbox" id="fastSim" checked> 빠른 시간(×20)</label>
+      </div>
+    </section>
+
+    <section class="card map-card">
+      <h2>지점 지도</h2>
+      <div id="map" aria-label="영천시 맨홀 센서 지도"></div>
+    </section>
+
+    <section class="card list-card">
+      <h2>맨홀 센서 목록</h2>
+      <ul id="sensorList" class="sensor-list"></ul>
+    </section>
+
+    <section class="card detail-card" id="detailCard">
+      <h2 id="detailTitle">지점을 선택하세요</h2>
+      <div id="detailBody" class="detail-body"></div>
+      <div class="chart-wrap"><canvas id="chart" height="180"></canvas></div>
+    </section>
+
+    <section class="card alerts-card">
+      <h2>알림 기록</h2>
+      <ul id="alertLog" class="alert-log"><li class="empty">아직 알림이 없습니다.</li></ul>
+    </section>
+
+    <section class="card guide-card">
+      <h2>침수 위험 시 행동요령</h2>
+      <ol>
+        <li>맨홀·빗물받이 주변에 접근하지 마세요. 뚜껑이 솟구칠 수 있습니다.</li>
+        <li>지하주차장·지하차도·반지하 주택에서 즉시 벗어나세요.</li>
+        <li>물이 무릎 높이 이상이면 걷거나 차로 이동하지 마세요.</li>
+        <li>전기 차단기를 내리고 높은 곳으로 대피하세요.</li>
+      </ol>
+      <div class="contacts">
+        <a class="btn danger" href="tel:119">🚒 119 신고</a>
+        <a class="btn" href="tel:0543306114">🏛 영천시청 054-330-6114</a>
+      </div>
+    </section>
+  </main>
+
+  <div id="toast" class="toast" role="alert"></div>
+
+  <footer class="foot">
+    센서 위치는 데모용 예시 좌표입니다 · 기준: 안전 &lt;50% · 주의 50% · 경고 70% · 위험 85% (맨홀 깊이 대비)
+  </footer>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+  <script src="sensors.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
