@@ -1,0 +1,490 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>야자 감독쌤의 분노</title>
+<style>
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #111; touch-action: none;
+    font-family: "Apple SD Gothic Neo", "Malgun Gothic", "Noto Sans KR", system-ui, sans-serif;
+    user-select: none; -webkit-user-select: none; }
+  canvas { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+  #dialog { position: fixed; left: 50%; transform: translateX(-50%); bottom: max(14px, env(safe-area-inset-bottom));
+    width: min(680px, calc(100% - 24px)); }
+  #box { background: rgba(12, 14, 28, .92); border: 2px solid #f4d35e; border-radius: 14px;
+    padding: 14px 16px 16px; min-height: 104px; color: #fff; box-shadow: 0 8px 30px rgba(0,0,0,.5); }
+  #speaker { display: inline-block; font-size: 13px; font-weight: 800; color: #12142a; background: #f4d35e;
+    border-radius: 6px; padding: 2px 9px; margin-bottom: 8px; }
+  #speaker:empty { display: none; }
+  #text { font-size: 18px; line-height: 1.55; word-break: keep-all; }
+  #text.narr { color: #c9cfe6; font-style: italic; }
+  #ctrl { display: flex; justify-content: flex-end; gap: 6px; margin-top: 6px; }
+  #ctrl button { font: inherit; font-size: 13px; color: #dfe3f5; background: rgba(12,14,28,.7);
+    border: 1px solid rgba(255,255,255,.28); border-radius: 999px; padding: 7px 14px; cursor: pointer; }
+  #ctrl #next { color: #12142a; background: #f4d35e; border-color: #f4d35e; font-weight: 800; }
+  #end { position: fixed; inset: 0; display: none; align-items: center; justify-content: center;
+    background: rgba(8, 9, 20, .78); padding: 20px; }
+  #end .card { width: min(420px, 100%); background: #171a33; border: 2px solid #f4d35e; border-radius: 18px;
+    padding: 26px 22px; text-align: center; color: #fff; }
+  #end h1 { margin: 0 0 6px; font-size: 40px; color: #ff4d4d; letter-spacing: 2px; }
+  #end p { margin: 8px 0; font-size: 16px; line-height: 1.6; color: #dfe3f5; word-break: keep-all; }
+  #end .stat { font-size: 15px; color: #f4d35e; font-weight: 700; }
+  #end button { margin-top: 14px; font: inherit; font-size: 17px; font-weight: 800; color: #12142a;
+    background: #f4d35e; border: 0; border-radius: 999px; padding: 12px 30px; cursor: pointer; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+
+<div id="dialog">
+  <div id="box"><div id="speaker"></div><div id="text"></div></div>
+  <div id="ctrl">
+    <button id="skip">건너뛰기 ≫</button>
+    <button id="next">다음 ▶</button>
+  </div>
+</div>
+
+<div id="end"><div class="card">
+  <h1>K.O.!</h1>
+  <p>학생: "쌤... 저 잠 다 깼어요...<br>이제 진짜 공부할게요..."</p>
+  <p class="stat" id="stat"></p>
+  <button id="again">다시 하기</button>
+</div></div>
+
+<script>
+(() => {
+'use strict';
+const cv = document.getElementById('c'), g = cv.getContext('2d');
+const $ = id => document.getElementById(id);
+let W = 0, H = 0, U = 1, DPR = 1;
+function resize() {
+  DPR = Math.min(window.devicePixelRatio || 1, 2);
+  W = innerWidth; H = innerHeight;
+  cv.width = W * DPR; cv.height = H * DPR;
+  U = Math.min(W / 420, H / 760);
+}
+addEventListener('resize', resize); resize();
+
+/* ───────── 스토리 ───────── */
+const STORY = [
+  ['', '저녁 7시 45분. 야간자율학습 시간. 교실은 쥐 죽은 듯 고요하다.'],
+  ['야자 감독쌤', '"음, 조용하군. 다들 열심히 하고 있겠지?"'],
+  ['', '드르렁... 쿨... 쿨... 푸우...'],
+  ['야자 감독쌤', '"...지금 이게 무슨 소리지?"'],
+  ['야자 감독쌤', '"한 놈, 두 놈, 세 놈... 아니, 전부 다 자고 있잖아?!"'],
+  ['야자 감독쌤', '"기말고사가 19일 남았는데 잠이 와?! 나는 퇴근도 못 하고 너희를 지키고 있는데!"'],
+  ['', '그때, 한 학생이 부스스 일어나 쌤을 향해 입을 삐죽 내밀었다.'],
+  ['학생', '"쌤... 딱 5분만 더 잘게요..."'],
+  ['야자 감독쌤', '"...그래. 오늘은 말로 안 한다."'],
+  ['', '쌤은 교탁 서랍에서 조용히 빨간 복싱 글러브를 꺼냈다.'],
+  ['야자 감독쌤', '"야자 특별 수업, 지금 시작한다. 과목은... 격투기다!!"'],
+];
+let mode = 'story', line = 0, typed = 0, typeT = 0;
+function showLine() {
+  const [who, txt] = STORY[line];
+  $('speaker').textContent = who;
+  $('text').className = who ? '' : 'narr';
+  typed = 0; typeT = 0; $('text').textContent = '';
+  $('next').textContent = line === STORY.length - 1 ? '수업 시작 ▶' : '다음 ▶';
+}
+function nextLine() {
+  audioInit();
+  const full = STORY[line][1];
+  if (typed < full.length) { typed = full.length; $('text').textContent = full; return; }
+  if (++line >= STORY.length) startFight(); else { showLine(); blip(); }
+}
+$('next').addEventListener('click', nextLine);
+$('skip').addEventListener('click', () => { audioInit(); startFight(); });
+$('again').addEventListener('click', () => { $('end').style.display = 'none'; startFight(); });
+
+/* ───────── 사운드 ───────── */
+let ac = null;
+function audioInit() {
+  if (ac) { if (ac.state === 'suspended') ac.resume(); return; }
+  try { ac = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { ac = null; }
+}
+function blip() { tone(520, .05, 'square', .04); }
+function tone(f, d, type, vol, f2) {
+  if (!ac) return;
+  const o = ac.createOscillator(), v = ac.createGain(), t = ac.currentTime;
+  o.type = type; o.frequency.setValueAtTime(f, t);
+  if (f2) o.frequency.exponentialRampToValueAtTime(f2, t + d);
+  v.gain.setValueAtTime(vol, t); v.gain.exponentialRampToValueAtTime(.001, t + d);
+  o.connect(v).connect(ac.destination); o.start(t); o.stop(t + d);
+}
+function thump(power) {
+  if (!ac) return;
+  const t = ac.currentTime, len = .12, buf = ac.createBuffer(1, ac.sampleRate * len, ac.sampleRate);
+  const d = buf.getChannelData(0);
+  for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / d.length, 2);
+  const s = ac.createBufferSource(), v = ac.createGain(), lp = ac.createBiquadFilter();
+  lp.type = 'lowpass'; lp.frequency.value = 900 + power * 120;
+  s.buffer = buf; v.gain.value = Math.min(.5, .18 + power * .025);
+  s.connect(lp).connect(v).connect(ac.destination); s.start(t);
+  tone(150 + power * 4, .14, 'sine', Math.min(.5, .2 + power * .02), 45);
+}
+
+/* ───────── 전투 상태 ───────── */
+const MAXHP = 600;
+let hp, combo, maxCombo, hits, comboT, fightT, seq, banner, koT, shake, flash, side;
+let attacks, parts, texts;
+const st = { x: 0, y: 0, r: 0, vx: 0, vy: 0, vr: 0, hx: 0, hy: 0, hr: 0, hvx: 0, hvy: 0, hvr: 0, sq: 0, hurt: 0 };
+
+// 기술: limb(L/R 글러브, F 발, K 무릎), 타깃 부위, 궤적 제어점(화면 비율), 데미지, 넉백
+const T = {
+  jab:      { name: '잽!',            limb: 'L', part: 'head', c: [-.10, .10], dmg: 4,  k: [ 40, -20,  .10], dur: .20 },
+  straight: { name: '스트레이트!',     limb: 'R', part: 'head', c: [ .10, .10], dmg: 6,  k: [-50, -30, -.14], dur: .24 },
+  hookL:    { name: '레프트 훅!',      limb: 'L', part: 'head', c: [-.75, -.05], dmg: 7, k: [170, -10,  .32], dur: .28 },
+  hookR:    { name: '라이트 훅!',      limb: 'R', part: 'head', c: [ .75, -.05], dmg: 7, k: [-170, -10, -.32], dur: .28 },
+  body:     { name: '바디 블로!',      limb: 'R', part: 'body', c: [ .25, .25], dmg: 6,  k: [-40,  50, -.06], dur: .24 },
+  upper:    { name: '어퍼컷!!',        limb: 'R', part: 'chin', c: [ .02, .75], dmg: 10, k: [ 10, -260, -.2], dur: .30 },
+  low:      { name: '로우킥!',         limb: 'F', part: 'legs', c: [ .85, .30], dmg: 7,  k: [-120, 20, .12], dur: .30 },
+  high:     { name: '하이킥!!',        limb: 'F', part: 'head', c: [ .95, -.10], dmg: 12, k: [-240, -40, -.45], dur: .34 },
+  knee:     { name: '니킥!!',          limb: 'K', part: 'body', c: [ 0, .60], dmg: 10, k: [ 0, -150, .05], dur: .30 },
+  spin:     { name: '스피닝 백피스트!!!', limb: 'R', part: 'head', c: [ 1.3, -.25], dmg: 18, k: [-330, -60, -.7], dur: .40 },
+};
+const CHAIN = ['jab','jab','straight','hookL','body','upper','jab','straight','low','hookR','knee','jab','hookL','high'];
+
+function startFight() {
+  $('dialog').style.display = 'none';
+  mode = 'fight';
+  hp = MAXHP; combo = 0; maxCombo = 0; hits = 0; comboT = 0; fightT = 0; seq = 0; koT = 0; shake = 0; flash = 0; side = 1;
+  attacks = []; parts = []; texts = []; banner = 1.6;
+  Object.keys(st).forEach(k => st[k] = 0);
+  tone(660, .5, 'triangle', .15, 990);
+}
+
+function partPos(p) {
+  const fx = W / 2 + st.x, fy = H * .52 + st.y;
+  if (p === 'head') return [fx + st.hx, fy - 232 * U + st.hy];
+  if (p === 'chin') return [fx + st.hx, fy - 185 * U + st.hy];
+  if (p === 'body') return [fx, fy - 70 * U];
+  return [fx, fy + 120 * U];
+}
+function restPos(l) {
+  const bob = Math.sin(performance.now() / 260 + (l === 'L' ? 0 : 2)) * 6 * U;
+  if (l === 'L') return [W * .2, H * .9 + bob];
+  if (l === 'R') return [W * .8, H * .9 + bob];
+  if (l === 'F') return [W * .92, H * 1.15];
+  return [W * .5, H * 1.25];
+}
+function anchor(l) {
+  if (l === 'L') return [W * .02, H * 1.2];
+  if (l === 'R') return [W * .98, H * 1.2];
+  if (l === 'F') return [W * .72, H * 1.35];
+  return [W * .5, H * 1.6];
+}
+
+function attack() {
+  if (mode !== 'fight' || koT > 0 || banner > .9) return;
+  audioInit();
+  let key;
+  if (combo > 0 && (combo + 1) % 15 === 0) key = 'spin';
+  else { key = CHAIN[seq % CHAIN.length]; seq++; if (Math.random() < .18) key = CHAIN[(Math.random() * CHAIN.length) | 0]; }
+  let t = Object.assign({}, T[key]);
+  // 같은 손이 아직 휘두르는 중이면 반대 손으로
+  if ((t.limb === 'L' || t.limb === 'R') && attacks.some(a => a.limb === t.limb && a.p < .7)) {
+    if (key === 'jab' || key === 'straight' || key === 'body') {
+      t.limb = t.limb === 'L' ? 'R' : 'L'; t.c = [-t.c[0], t.c[1]]; t.k = [-t.k[0], t.k[1], -t.k[2]];
+    }
+  }
+  attacks.push(Object.assign(t, { p: 0, hit: false, from: restPos(t.limb) }));
+  tone(300, .08, 'sawtooth', .03, 120);
+}
+
+function impact(a) {
+  const [x, y] = partPos(a.part);
+  const crit = Math.random() < .12, dmg = Math.round(a.dmg * (crit ? 2 : 1) * (1 + Math.min(combo, 40) * .01));
+  hp = Math.max(0, hp - dmg); hits++; combo++; comboT = 1.3; maxCombo = Math.max(maxCombo, combo);
+  const m = U * (crit ? 1.4 : 1);
+  if (a.part === 'legs' || a.part === 'body') { st.vx += a.k[0] * m * 3; st.vy += a.k[1] * m * 2; st.vr += a.k[2] * 4; }
+  else { st.hvx += a.k[0] * m * 6; st.hvy += a.k[1] * m * 5; st.hvr += a.k[2] * 14; st.vx += a.k[0] * m * 1.2; st.vr += a.k[2] * 2; }
+  st.sq = 1; st.hurt = .35;
+  shake = Math.min(26, 5 + a.dmg * 1.1 * (crit ? 1.5 : 1)); flash = crit ? .5 : .2;
+  thump(a.dmg * (crit ? 1.6 : 1));
+  for (let i = 0; i < 9 + a.dmg; i++) {
+    const an = Math.random() * 6.283, sp = (150 + Math.random() * 420) * U;
+    parts.push({ x, y, vx: Math.cos(an) * sp, vy: Math.sin(an) * sp - 120 * U, l: .5 + Math.random() * .3, t: 0,
+      star: Math.random() < .45, c: ['#ffe066', '#fff', '#ff6b6b', '#ffa94d'][(Math.random() * 4) | 0] });
+  }
+  parts.push({ x, y, burst: true, t: 0, l: .22, s: (50 + a.dmg * 5) * U });
+  texts.push({ x: x + (Math.random() - .5) * 80 * U, y: y - 40 * U, t: 0, l: .8, s: crit ? 40 : 28, c: crit ? '#ff4d4d' : '#fff', txt: (crit ? '크리티컬! ' : '') + '-' + dmg });
+  texts.push({ x: W / 2, y: H * .2, t: 0, l: .7, s: a.dmg >= 10 ? 38 : 28, c: '#f4d35e', txt: a.name, fixed: true });
+  if (hp <= 0) {
+    koT = .0001; st.vy -= 500 * U; st.vr += (a.k[2] < 0 ? -6 : 6);
+    tone(880, .9, 'square', .08, 110);
+  }
+}
+
+cv.addEventListener('pointerdown', e => { e.preventDefault(); attack(); });
+addEventListener('keydown', e => {
+  if (e.repeat) return;
+  if (e.code === 'Space' || e.code === 'Enter') { if (mode === 'story') nextLine(); else attack(); }
+});
+
+/* ───────── 그리기 도구 ───────── */
+function rr(x, y, w, h, r) { g.beginPath(); g.roundRect(x, y, w, h, r); }
+function ell(x, y, rx, ry, c) { g.beginPath(); g.ellipse(x, y, rx, ry, 0, 0, 6.283); g.fillStyle = c; g.fill(); }
+function star(x, y, r, c, rot) {
+  g.save(); g.translate(x, y); g.rotate(rot || 0); g.beginPath();
+  for (let i = 0; i < 10; i++) { const a = i * Math.PI / 5 - Math.PI / 2, q = i % 2 ? r * .45 : r; g.lineTo(Math.cos(a) * q, Math.sin(a) * q); }
+  g.closePath(); g.fillStyle = c; g.fill(); g.restore();
+}
+
+function drawRoom(night) {
+  const wallH = H * .62;
+  g.fillStyle = '#e9e6d6'; g.fillRect(0, 0, W, wallH);
+  g.fillStyle = '#cfc9b3'; g.fillRect(0, wallH - 10 * U, W, 10 * U);
+  const fl = g.createLinearGradient(0, wallH, 0, H); fl.addColorStop(0, '#c9ad85'); fl.addColorStop(1, '#a98c63');
+  g.fillStyle = fl; g.fillRect(0, wallH, W, H - wallH);
+  // 창문 (밤)
+  const wx = W * .04, wy = H * .08, ww = W * .3, wh = H * .2;
+  g.fillStyle = '#f7f5ec'; g.fillRect(wx - 5, wy - 5, ww + 10, wh + 10);
+  const ng = g.createLinearGradient(0, wy, 0, wy + wh); ng.addColorStop(0, '#0d1433'); ng.addColorStop(1, '#27345f');
+  g.fillStyle = ng; g.fillRect(wx, wy, ww, wh);
+  ell(wx + ww * .75, wy + wh * .3, 11 * U, 11 * U, '#fff3b0');
+  g.fillStyle = '#f7f5ec'; g.fillRect(wx + ww / 2 - 3, wy, 6, wh);
+  // 전자칠판
+  const bx = W * .42, by = H * .06, bw = W * .54, bh = H * .24;
+  g.fillStyle = '#23262e'; rr(bx - 6, by - 6, bw + 12, bh + 12, 6); g.fill();
+  g.fillStyle = '#141b3c'; g.fillRect(bx, by, bw, bh);
+  g.fillStyle = '#fff'; g.textAlign = 'left'; g.textBaseline = 'middle';
+  g.font = `800 ${Math.round(bh * .2)}px monospace`;
+  g.fillText(night ? '19:45' : 'ROUND 1', bx + bw * .06, by + bh * .22);
+  g.font = `700 ${Math.round(Math.min(bh * .13, bw * .075))}px sans-serif`; g.fillStyle = "#b8f26b";
+  g.fillText(night ? '야간자율학습 중 · 정숙' : '야자 특별수업: 격투기', bx + bw * .06, by + bh * .52);
+  g.fillStyle = '#8fa0d8'; g.fillText('기말고사 D-19', bx + bw * .06, by + bh * .78);
+}
+
+function drawSleeper(x, y, s, ph) {
+  g.save(); g.translate(x, y); g.scale(s, s);
+  g.fillStyle = '#8b5a3c'; rr(-34, -62, 68, 50, 10); g.fill();          // 의자 등받이
+  g.fillStyle = '#1d1f2b'; g.beginPath(); g.ellipse(0, -8, 52, 30, 0, Math.PI, 0); g.fill(); // 등
+  ell(-6, -22, 24, 19, '#15161c');                                        // 머리
+  g.fillStyle = '#dcb98a'; rr(-62, -8, 124, 12, 5); g.fill();             // 책상
+  g.fillStyle = '#9aa0a8'; g.fillRect(-52, 4, 5, 46); g.fillRect(47, 4, 5, 46);
+  g.fillStyle = '#fff'; g.font = '800 20px sans-serif'; g.textAlign = 'center';
+  for (let i = 0; i < 3; i++) {
+    const t = ((performance.now() / 1400 + ph + i * .33) % 1);
+    g.globalAlpha = 1 - t; g.font = `800 ${14 + t * 14}px sans-serif`;
+    g.fillStyle = '#4a6cff'; g.fillText('Z', 20 + t * 26, -40 - t * 46);
+  }
+  g.restore(); g.globalAlpha = 1;
+}
+
+// 학생 캐릭터 (만화 캐릭터)
+function drawStudent(cx, cy, s, mood, time) {
+  g.save(); g.translate(cx, cy); g.scale(s, s);
+  const sq = st.sq * .08;
+  g.scale(1 + sq, 1 - sq);
+  // 다리
+  g.fillStyle = '#2a2d3a'; rr(-48, 30, 42, 190, 14); g.fill(); rr(6, 30, 42, 190, 14); g.fill();
+  g.fillStyle = '#f2f2f2'; rr(-56, 208, 54, 24, 10); g.fill(); rr(2, 208, 54, 24, 10); g.fill();
+  // 몸통 (후드티)
+  g.fillStyle = '#3f6fb5'; rr(-78, -168, 156, 220, 34); g.fill();
+  g.fillStyle = '#356099'; rr(-34, -30, 68, 44, 12); g.fill();
+  // 팔
+  g.fillStyle = '#3f6fb5'; rr(-108, -156, 40, 170, 18); g.fill(); rr(68, -156, 40, 170, 18); g.fill();
+  ell(-88, 20, 17, 17, '#f0c9a0'); ell(88, 20, 17, 17, '#f0c9a0');
+  // 목 + 머리
+  g.fillStyle = '#e6bb90'; g.fillRect(-18, -190, 36, 30);
+  g.translate(st.hx / s, -232 + st.hy / s); g.rotate(st.hr);
+  ell(-62, 4, 11, 16, '#f0c9a0'); ell(62, 4, 11, 16, '#f0c9a0');
+  ell(0, 0, 60, 66, '#f0c9a0');
+  g.fillStyle = '#1b1b22'; g.beginPath(); g.ellipse(0, -14, 61, 54, 0, Math.PI * 1.02, Math.PI * 1.98); g.fill();
+  g.beginPath(); g.moveTo(-58, -22); g.quadraticCurveTo(0, -52, 58, -22); g.quadraticCurveTo(0, -34, -58, -22); g.fill();
+  // 볼
+  g.globalAlpha = .45; ell(-36, 20, 12, 8, '#ff8f8f'); ell(36, 20, 12, 8, '#ff8f8f'); g.globalAlpha = 1;
+  g.strokeStyle = '#1b1b22'; g.lineWidth = 4; g.lineCap = 'round';
+  if (st.hurt > 0 && mood !== 'ko') {           // 맞는 순간
+    g.beginPath(); g.moveTo(-34, -6); g.lineTo(-16, 2); g.lineTo(-34, 10); g.moveTo(34, -6); g.lineTo(16, 2); g.lineTo(34, 10); g.stroke();
+    ell(0, 34, 13, 15, '#7a2b2b');
+  } else if (mood === 'sleepy') {
+    g.beginPath(); g.moveTo(-36, 2); g.lineTo(-14, 2); g.moveTo(14, 2); g.lineTo(36, 2); g.stroke();
+    g.beginPath(); g.moveTo(-16, 36); g.quadraticCurveTo(0, 24, 16, 36); g.stroke();      // 삐죽
+    ell(0, 30, 12, 5, '#e08a8a');
+  } else if (mood === 'awake') {
+    ell(-25, 2, 9, 11, '#fff'); ell(25, 2, 9, 11, '#fff'); ell(-25, 3, 4, 5, '#1b1b22'); ell(25, 3, 4, 5, '#1b1b22');
+    g.beginPath(); g.moveTo(-36, -18); g.lineTo(-14, -14); g.moveTo(36, -18); g.lineTo(14, -14); g.stroke();
+    ell(0, 34, 9, 10, '#7a2b2b');
+  } else {                                        // 어질어질 / KO
+    for (const ex of [-25, 25]) {
+      g.beginPath();
+      for (let a = 0; a < 12; a += .4) { const r = a * 1.1; g.lineTo(ex + Math.cos(a + time * 9) * r, 2 + Math.sin(a + time * 9) * r); }
+      g.stroke();
+    }
+    g.beginPath(); g.moveTo(-18, 36); g.quadraticCurveTo(-9, 28, 0, 36); g.quadraticCurveTo(9, 44, 18, 36); g.stroke();
+  }
+  // 혹과 반창고
+  const dmgR = 1 - hpRatio();
+  if (dmgR > .3) { ell(-28, -62, 16, 14, '#ff9c8a'); ell(-31, -66, 5, 4, '#ffd0c4'); }
+  if (dmgR > .55) { g.fillStyle = '#f3dfb8'; g.save(); g.translate(34, 26); g.rotate(-.5); rr(-16, -6, 32, 12, 4); g.fill(); g.restore(); }
+  if (dmgR > .75) { ell(26, -66, 13, 12, '#ff9c8a'); }
+  if (mood === 'dizzy' || mood === 'ko') for (let i = 0; i < 3; i++) {
+    const a = time * 4 + i * 2.094; star(Math.cos(a) * 58, -84 + Math.sin(a) * 12, 10, '#ffe066', a);
+  }
+  g.restore();
+}
+function hpRatio() { return mode === 'fight' ? hp / MAXHP : 1; }
+
+function drawLimb(l, x, y, sc, a) {
+  const [ax, ay] = anchor(l), u = U * sc, ang = Math.atan2(y - ay, x - ax) + Math.PI / 2;
+  g.lineCap = 'round';
+  if (l === 'L' || l === 'R') {
+    g.strokeStyle = '#2b3147'; g.lineWidth = 50 * u; g.beginPath(); g.moveTo(ax, ay); g.lineTo(x, y); g.stroke();
+    g.save(); g.translate(x, y); g.rotate(ang); g.scale(u, u);
+    const sd = l === 'L' ? 1 : -1;
+    g.fillStyle = '#fff'; rr(-34, 34, 68, 34, 8); g.fill();
+    g.fillStyle = '#c21f2b'; g.fillRect(-34, 46, 68, 8);
+    ell(sd * 36, 6, 17, 28, '#b3141f');
+    ell(0, -4, 46, 54, '#e02734');
+    g.globalAlpha = .35; ell(-sd * 14, -26, 18, 12, '#fff'); g.globalAlpha = 1;
+    g.strokeStyle = 'rgba(0,0,0,.25)'; g.lineWidth = 3; g.beginPath(); g.arc(0, -4, 34, .5, 2.6); g.stroke();
+    g.restore();
+  } else if (l === 'F') {
+    g.strokeStyle = '#23283a'; g.lineWidth = 58 * u; g.beginPath(); g.moveTo(ax, ay); g.lineTo(x, y); g.stroke();
+    g.save(); g.translate(x, y); g.rotate(ang); g.scale(u, u);
+    ell(0, -8, 34, 60, '#15161c'); ell(0, -34, 26, 24, '#2c2e3a');
+    g.fillStyle = '#6b4a2f'; rr(-34, 30, 68, 14, 6); g.fill();
+    g.restore();
+  } else {
+    g.strokeStyle = '#23283a'; g.lineWidth = 96 * u; g.beginPath(); g.moveTo(ax, ay); g.lineTo(x, y); g.stroke();
+    ell(x, y - 6 * u, 34 * u, 30 * u, '#343a52');
+  }
+}
+
+/* ───────── 메인 루프 ───────── */
+let last = performance.now();
+function frame(now) {
+  const dt = Math.min(.033, (now - last) / 1000); last = now;
+  const time = now / 1000;
+  g.setTransform(DPR, 0, 0, DPR, 0, 0);
+  if (mode === 'story') drawStory(dt, time); else drawFight(dt, time);
+  requestAnimationFrame(frame);
+}
+
+function drawStory(dt, time) {
+  const full = STORY[line][1];
+  if (typed < full.length) {
+    typeT += dt;
+    while (typeT > .032 && typed < full.length) { typeT -= .032; typed++; }
+    $('text').textContent = full.slice(0, typed);
+  }
+  const anger = Math.min(1, line / 8);
+  g.save();
+  if (anger > .4) g.translate((Math.random() - .5) * anger * 4, (Math.random() - .5) * anger * 4);
+  drawRoom(true);
+  const rows = [[.2, .50, .55], [.5, .50, .55], [.8, .50, .55], [.14, .64, .8], [.86, .64, .8]];
+  rows.forEach((r, i) => drawSleeper(W * r[0], H * r[1], U * r[2] * 1.5, i * .37));
+  if (line >= 6) drawStudent(W / 2, H * .52, U * .85, 'sleepy', time);
+  else drawSleeper(W * .5, H * .66, U * 1.5, .6);
+  g.restore();
+  // 분노 비네트
+  const v = g.createRadialGradient(W / 2, H / 2, Math.min(W, H) * .25, W / 2, H / 2, Math.max(W, H) * .75);
+  v.addColorStop(0, 'rgba(255,0,0,0)'); v.addColorStop(1, `rgba(200,0,0,${anger * (.4 + Math.sin(time * 6) * .1)})`);
+  g.fillStyle = v; g.fillRect(0, 0, W, H);
+  if (line >= 4) { g.font = `${Math.round(54 * U)}px sans-serif`; g.textAlign = 'center'; g.fillText('💢', W * .86, H * .4 + Math.sin(time * 10) * 4); }
+  if (line >= 9) { drawLimb('L', W * .2, H * .62, 1); drawLimb('R', W * .8, H * .62, 1); }
+}
+
+function spring(p, v, k, c, dt) { v += (-k * st[p] - c * st[v2[p]]) * dt; }
+const v2 = { x: 'vx', y: 'vy', r: 'vr', hx: 'hvx', hy: 'hvy', hr: 'hvr' };
+function step(p, k, c, dt) { const v = v2[p]; st[v] += (-k * st[p] - c * st[v]) * dt; st[p] += st[v] * dt; }
+
+function drawFight(dt, time) {
+  const ko = koT > 0;
+  if (ko) { koT += dt; dt *= .45; }
+  else if (banner <= .9) fightT += dt;
+  banner = Math.max(0, banner - dt);
+  if (comboT > 0 && (comboT -= dt) <= 0) combo = 0;
+  st.sq = Math.max(0, st.sq - dt * 6); st.hurt = Math.max(0, st.hurt - dt);
+  if (ko) { st.vy += 1500 * U * dt; st.y += st.vy * dt; st.x += st.vx * dt; st.r += st.vr * dt * .5; if (st.y > H * .32) { st.y = H * .32; st.vy = 0; st.vx = 0; st.vr = 0; } }
+  else { step('x', 120, 14, dt); step('y', 160, 16, dt); step('r', 140, 14, dt); }
+  step('hx', 220, 13, dt); step('hy', 240, 14, dt); step('hr', 200, 12, dt);
+  shake = Math.max(0, shake - dt * 60); flash = Math.max(0, flash - dt * 2);
+
+  g.save();
+  g.translate((Math.random() - .5) * shake * U, (Math.random() - .5) * shake * U);
+  drawRoom(false);
+  // 양옆 책상
+  for (const dx of [.1, .9]) { g.fillStyle = '#dcb98a'; rr(W * dx - 60 * U, H * .66, 120 * U, 14 * U, 5); g.fill(); g.fillStyle = '#9aa0a8'; g.fillRect(W * dx - 50 * U, H * .66 + 14 * U, 6 * U, 80 * U); g.fillRect(W * dx + 44 * U, H * .66 + 14 * U, 6 * U, 80 * U); }
+  ell(W / 2 + st.x, H * .52 + 232 * U, 100 * U, 16 * U, 'rgba(0,0,0,.2)');
+  const mood = ko ? 'ko' : hp > MAXHP * .66 ? 'sleepy' : hp > MAXHP * .33 ? 'awake' : 'dizzy';
+  g.save(); g.translate(W / 2 + st.x, H * .52 + st.y + 230 * U); g.rotate(st.r); g.translate(0, -230 * U);
+  drawStudent(0, 0, U, mood, time);
+  g.restore();
+  if (mood === 'sleepy' && !ko) { g.font = `800 ${24 * U}px sans-serif`; g.fillStyle = '#4a6cff'; g.textAlign = 'center';
+    const t = time % 1; g.globalAlpha = 1 - t; g.fillText('Z', W / 2 + st.x + (80 + t * 30) * U, H * .52 - (290 + t * 50) * U); g.globalAlpha = 1; }
+
+  // 이펙트
+  parts = parts.filter(p => (p.t += dt) < p.l);
+  for (const p of parts) {
+    const q = p.t / p.l;
+    if (p.burst) { g.strokeStyle = `rgba(255,255,255,${1 - q})`; g.lineWidth = 10 * U * (1 - q); g.beginPath(); g.arc(p.x, p.y, p.s * (.4 + q), 0, 6.283); g.stroke(); star(p.x, p.y, p.s * (1 - q * .5), `rgba(255,224,102,${.8 * (1 - q)})`, p.x); continue; }
+    p.vy += 900 * U * dt; p.x += p.vx * dt; p.y += p.vy * dt;
+    g.globalAlpha = 1 - q;
+    if (p.star) star(p.x, p.y, 11 * U, p.c, p.t * 10); else ell(p.x, p.y, 5 * U, 5 * U, p.c);
+  }
+  g.globalAlpha = 1;
+
+  // 공격 (글러브·발·무릎)
+  const busy = {};
+  attacks = attacks.filter(a => (a.p += dt / a.dur / (ko ? .45 : 1)) < 1);
+  for (const a of attacks) {
+    busy[a.limb] = true;
+    const tg = partPos(a.part), out = a.p < .5;
+    let e = out ? a.p / .5 : 1 - (a.p - .5) / .5; e = out ? e * e : e * (2 - e);
+    if (!a.hit && a.p >= .5) { a.hit = true; impact(a); }
+    const cxp = (a.from[0] + tg[0]) / 2 + a.c[0] * W * .5, cyp = (a.from[1] + tg[1]) / 2 + a.c[1] * H * .3;
+    const i = 1 - e, x = i * i * a.from[0] + 2 * i * e * cxp + e * e * tg[0], y = i * i * a.from[1] + 2 * i * e * cyp + e * e * tg[1];
+    drawLimb(a.limb, x, y, 1.25 - e * .45, a);
+  }
+  for (const l of ['L', 'R']) if (!busy[l]) { const [x, y] = restPos(l); drawLimb(l, x, y, 1.25); }
+  g.restore();
+
+  if (flash > 0) { g.fillStyle = `rgba(255,255,255,${flash})`; g.fillRect(0, 0, W, H); }
+
+  // 떠오르는 글자
+  texts = texts.filter(t => (t.t += dt) < t.l);
+  g.textAlign = 'center'; g.textBaseline = 'middle'; g.lineJoin = 'round';
+  for (const t of texts) {
+    const q = t.t / t.l, pop = Math.min(1, t.t * 12);
+    g.globalAlpha = 1 - q * q; g.font = `900 ${t.s * U * (.6 + pop * .4)}px sans-serif`;
+    const y = t.fixed ? t.y : t.y - q * 70 * U;
+    g.lineWidth = 6 * U; g.strokeStyle = '#12142a'; g.strokeText(t.txt, t.x, y); g.fillStyle = t.c; g.fillText(t.txt, t.x, y);
+  }
+  g.globalAlpha = 1;
+
+  // HUD
+  const bw = Math.min(W - 32, 520), bx = (W - bw) / 2, by = 16 + (parseInt(getComputedStyle(document.documentElement).getPropertyValue('--sat')) || 0);
+  g.fillStyle = 'rgba(12,14,28,.8)'; rr(bx - 4, by - 4, bw + 8, 30, 10); g.fill();
+  const r = hp / MAXHP; g.fillStyle = r > .5 ? '#4a6cff' : r > .25 ? '#ffa94d' : '#ff4d4d';
+  if (r > 0) { rr(bx, by, bw * r, 22, 7); g.fill(); }
+  g.fillStyle = '#fff'; g.font = '800 13px sans-serif'; g.fillText(`💤 졸음 게이지  ${Math.ceil(r * 100)}%`, W / 2, by + 12);
+  g.textAlign = 'left'; g.font = '700 14px sans-serif'; g.fillStyle = '#12142a';
+  g.fillText(`⏱ ${fightT.toFixed(1)}초`, bx, by + 46);
+  if (combo > 1) {
+    g.textAlign = 'right'; g.font = `900 ${Math.min(46, 24 + combo) * U}px sans-serif`;
+    g.lineWidth = 5 * U; g.strokeStyle = '#12142a'; g.strokeText(`${combo} 콤보!`, W - 16, by + 62 * U + 20);
+    g.fillStyle = '#ff4d4d'; g.fillText(`${combo} 콤보!`, W - 16, by + 62 * U + 20);
+  }
+  g.textAlign = 'center';
+  if (hits === 0 && banner <= .9) { g.globalAlpha = .6 + Math.sin(time * 5) * .4; g.font = `800 ${20 * U}px sans-serif`; g.fillStyle = '#12142a'; g.fillText('👆 화면을 터치해서 공격!', W / 2, H * .97 - 8); g.globalAlpha = 1; }
+  if (banner > 0) {
+    const b = banner > .9 ? 'ROUND 1' : 'FIGHT!';
+    g.font = `900 ${70 * U}px sans-serif`; g.lineWidth = 10 * U; g.strokeStyle = '#12142a'; g.strokeText(b, W / 2, H * .42);
+    g.fillStyle = banner > .9 ? '#f4d35e' : '#ff4d4d'; g.fillText(b, W / 2, H * .42);
+  }
+  if (ko && koT > 1.5 && $('end').style.display !== 'flex') {
+    $('stat').textContent = `기록 ${fightT.toFixed(1)}초 · 타격 ${hits}회 · 최대 ${maxCombo}콤보`;
+    $('end').style.display = 'flex';
+  }
+}
+
+showLine();
+requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>
